@@ -1,29 +1,51 @@
-use reqwest;
-use scraper::{Html, Selector};
+use reqwest::blocking::Client;
+use scraper::{Html, Selector, ElementRef};
+use std::error::Error;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // URL to scrape
-    let url = "https://www.nbcnews.com/politics/congress/failure-republicans-will-try-impeach-mayorkas-border-rcna138474ca";
-
-    // Create a Client instance with a custom User-Agent
-    let client = reqwest::blocking::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3")
+fn main() -> Result<(), Box<dyn Error>> {
+    let url = "https://blog.google/technology/ai/google-gemini-next-generation-model-february-2024/";
+    let client = Client::builder()
+        .user_agent("Mozilla/5.0 (compatible; YourBot/0.1; +http://yourbot.com/info)")
         .build()?;
 
-    // Make a synchronous GET request using the client
     let resp = client.get(url).send()?.text()?;
-
-    // Parse the HTML
     let fragment = Html::parse_document(&resp);
 
-    // Create a Selector for parsing
-    let stories_selector = Selector::parse("p").unwrap(); // Change "p" to the appropriate CSS selector for the content you want
+    let selectors = ["p", "h1", "h2", "img", "a"];
+    let parsed_selectors = selectors.iter()
+        .map(|&sel| {
+            Selector::parse(sel).unwrap_or_else(|_| panic!("Failed to parse selector: {}", sel))
+        })
+        .collect::<Vec<Selector>>();
 
-    // Iterate through the selected elements
-    for story in fragment.select(&stories_selector) {
-        let story_txt = story.text().collect::<Vec<_>>().join(" ");
-        println!("{}", story_txt);
+    for (i, selector) in parsed_selectors.iter().enumerate() {
+        for element in fragment.select(selector) {
+            let sel_str = selectors[i]; // Use the original selector string for matching
+            match sel_str {
+                "img" => {
+                    if let Some(src) = element.value().attr("src") {
+                        println!("Image URL: {}", resolve_url(url, src));
+                    }
+                },
+                "a" => {
+                    if let Some(href) = element.value().attr("href") {
+                        println!("Link URL: {}", resolve_url(url, href));
+                    }
+                },
+                _ => {
+                    let text = element.text().collect::<Vec<_>>().join(" ");
+                    println!("{}: {}", sel_str, text); // Use sel_str directly
+                },
+            }
+        }
     }
 
     Ok(())
 }
+
+fn resolve_url(base_url: &str, url: &str) -> String {
+    // Placeholder for URL resolution logic
+    let parsed_base_url = url::Url::parse(base_url).expect("Failed to parse base URL");
+    parsed_base_url.join(url).unwrap_or_else(|_| parsed_base_url.clone()).to_string()
+}
+
